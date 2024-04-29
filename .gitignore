@@ -6,3 +6,6 @@ decoded_audio.wav
 .idea/
 
 whisper/
+.DS_Store
+
+voice_conversation_ai/__pycache__/
