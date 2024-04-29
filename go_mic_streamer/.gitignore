@@ -1,0 +1,20 @@
+# Ignore binary files
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Ignore build output
+/bin/
+/pkg/
+/out/
+
+# Ignore editor-specific files
+.vscode/
+.idea/
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+audio_*/

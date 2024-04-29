@@ -1,0 +1,8 @@
+.env
+.venv/
+decoded_audio.wav
+
+.vscode/
+.idea/
+
+whisper/
