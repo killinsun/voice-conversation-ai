@@ -29,11 +29,15 @@ async def websocket_test(websocket: WebSocket):
     openai_llm = OpenAILLM(model_name="gpt-3.5-turbo")
     # ollama_llm = OllamaLLM()
 
-    # vvox_response = VoiceVoxTextToSpeechResponse()
-    simple_response = SimpleTextDisplayResponse()
+    # response = VoiceVoxTextToSpeechResponse()
+    response = SimpleTextDisplayResponse()
 
+    conversation_logs = [
+        {"role": "assistant",
+         "content": "お電話ありがとうございます。首無し商事株式会社、自動応答システムでございます。"},
+    ]
     while True:
-        simple_response.say("そっかそっか")
+        await websocket.send_text("はい")
         data = await websocket.receive_json()
         decoded_wav = base64.b64decode(data["media"]["payload"])
         # with open("decoded_audio.wav", "wb") as f:
@@ -41,6 +45,13 @@ async def websocket_test(websocket: WebSocket):
 
         transcribed_text = transcriber.transcribe(wav_bytes=decoded_wav)
         service = ConversationService(llm=openai_llm)
-        service.chat_with_ai_operator(input=transcribed_text, resp=simple_response)
+        clean_text = service.revise_dirty_text(input=transcribed_text, conversation_logs=conversation_logs)
+        conversation_logs.append(
+            {"role": "user", "content": clean_text}
+        )
 
-        await websocket.send_text(f"OK! data:{data}")
+        response = service.chat_with_ai_operator(conversation_logs=conversation_logs)
+        conversation_logs.append(
+            {"role": "assistant", "content": response}
+        )
+        await websocket.send_text(response)

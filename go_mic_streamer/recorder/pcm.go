@@ -1,4 +1,4 @@
-package pcm
+package recorder
 
 import (
 	"fmt"
@@ -60,20 +60,22 @@ func (p *PortAudioSystem) GetDeviceInfo() {
 type PCMRecorder struct {
 	BaseDir              string
 	Interval             int
-	SilentRatio          float32
+	SilentRatio          int
 	BaseLangCode         string
 	AltLangCodes         []string
 	BufferedContents     []int16
 	Input                []int16
 	recognitionStartTime time.Duration
 	silentCount          int
+	unSilentCount        int
 	audioSystem          AudioSystem
 }
 
-func NewPCMRecorder(audioSystem AudioSystem, baseDir string, interval int) *PCMRecorder {
+func NewPCMRecorder(audioSystem AudioSystem, baseDir string, interval int, silentRatio int) *PCMRecorder {
 	var pr = &PCMRecorder{
 		BaseDir:              baseDir,
 		Interval:             interval,
+		SilentRatio:          silentRatio,
 		recognitionStartTime: -1,
 		audioSystem:          audioSystem,
 	}
@@ -128,13 +130,15 @@ func (pr *PCMRecorder) processAudioInput(stream *AudioSystemStream, filePathCh c
 		log.Fatalf("Could not read stream\n%v", err)
 	}
 
-	if !pr.detectSilence(pr.Input) {
-		pr.record(pr.Input, (*stream).Time())
-	} else {
+	if pr.detectSilence(pr.Input) {
 		pr.silentCount++
+	} else {
+		pr.silentCount = 0
+		pr.unSilentCount++
+		pr.record(pr.Input, (*stream).Time())
 	}
 
-	if pr.detectSpeechStopped() || pr.detectSpeechExceededLimitation() {
+	if pr.isSpeechLengthEnough() && (pr.detectSpeechStopped() || pr.detectSpeechExceededLimitation()) {
 		log.Println("speech stopped or exceeded limitation. Starting finalizing.")
 		pr.finalizeRecording(filePathCh)
 	}
@@ -148,11 +152,11 @@ func (pr *PCMRecorder) finalizeRecording(filepathCh chan string) {
 
 	pr.BufferedContents = nil
 	pr.silentCount = 0
+	pr.unSilentCount = 0
 	pr.recognitionStartTime = -1
 }
 
 func (pr *PCMRecorder) record(input []int16, startTime time.Duration) {
-	pr.silentCount = 0
 	if pr.recognitionStartTime == -1 {
 		pr.recognitionStartTime = startTime
 	}
@@ -160,15 +164,22 @@ func (pr *PCMRecorder) record(input []int16, startTime time.Duration) {
 }
 
 func (pr *PCMRecorder) detectSilence(input []int16) bool {
+	// サンプリングした音声データの欠片に threshold 以上のものがあれば無音でないと判断
 	silent := true
+	threshold := int16(pr.SilentRatio)
+
 	for _, bit := range input {
-		// TODO: We should support ratio
-		if bit != 0 {
+		if abs(int16(bit)) > threshold {
 			silent = false
 			break
 		}
 	}
+
 	return silent
+}
+
+func (pr *PCMRecorder) isSpeechLengthEnough() bool {
+	return pr.unSilentCount > 100
 }
 
 func (pr *PCMRecorder) detectSpeechStopped() bool {
@@ -200,4 +211,11 @@ func (pr *PCMRecorder) writePCMData(outputFileName string, pcmData []int16) {
 func exists(fileName string) bool {
 	_, err := os.Stat(fileName)
 	return err == nil
+}
+
+func abs(x int16) int16 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }

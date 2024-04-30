@@ -1,4 +1,4 @@
-package pcm
+package recorder
 
 import (
 	"fmt"

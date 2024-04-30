@@ -45,7 +45,7 @@ func main() {
 	}
 
 	audioSystem := &pcm.PortAudioSystem{}
-	pr := pcm.NewPCMRecorder(audioSystem, fmt.Sprintf(baseDir+"/file"), 30)
+	pr := pcm.NewPCMRecorder(audioSystem, fmt.Sprintf(baseDir+"/file"), 30, 100)
 
 	pr.GetDeviceInfo()
 
@@ -80,6 +80,27 @@ func main() {
 		}
 	}()
 
+	// WebSocketからテキストを受信する処理を追加
+	go func() {
+		var msg = make([]byte, 512)
+		for {
+			n, err := ws.Read(msg)
+			if err != nil {
+				log.Println("Error reading from WebSocket:", err)
+				continue
+			}
+			receivedText := string(msg[:n])
+			log.Println("AI:", receivedText)
+
+			// 受信したテキストを処理する
+			// log.Println("starting Say")
+			// err = player.Say(receivedText)
+			// if err != nil {
+			// 	log.Fatal("Error!", err)
+			// }
+		}
+	}()
+
 	<-sig
 	wait.Wait()
 }
@@ -109,40 +130,7 @@ func sendMediaStream(ws *websocket.Conn, payload string) error {
 		log.Fatal(sendErr)
 	}
 
-	log.Println(mediaStream)
-	log.Println(jsonData)
-	log.Println(string(jsonData))
-
 	log.Printf("Send: %d to Server", mediaStream.SequenceNumber)
 
 	return nil
 }
-
-// func main() {
-// 	fmt.Println("Streaming. Press Ctrl + C to stop.")
-
-// 	conn, err := grpc.Dial(
-// 		"localhost:8080",
-
-// 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-// 		grpc.WithBlock(),
-// 	)
-// 	if err != nil {
-// 		log.Fatal("Connection failed.")
-// 		return
-// 	}
-// 	defer conn.Close()
-// 	client = transcriptorpb.NewTranscriptorServiceClient(conn)
-
-// 	wavStream, err := client.StreamWav(context.Background())
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	res, err := wavStream.CloseAndRecv()
-// 	if err != nil {
-// 		log.Fatalf("Error closing and receiving StreamWav: %v", err)
-// 	}
-// 	fmt.Printf("Done: %v\n", res.GetDone())
-// 	fmt.Println("Streaming finished.")
-// }

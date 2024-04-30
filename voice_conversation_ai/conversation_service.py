@@ -48,39 +48,70 @@ class VoiceVoxTextToSpeechResponse(ConversationResponse):
 
 
 class SimpleTextDisplayResponse(ConversationResponse):
-    def say(self, text: str) -> None:
+    def say(self, text: str) -> str:
         print(text)
-
+        return text
 
 
 class ConversationService:
     def __init__(self, llm: ILLM):
         self.llm = llm
 
-    def correct_dirty_transcript(self, input: str, resp: ConversationResponse) -> str:
+    def revise_dirty_text(self, input: str, conversation_logs: list[dict[str, str]]) -> str:
         system_prompt = """
-        あなたは、高精度な文章修正システムです。音声から文字起こしした文章の会話文脈を、自然な形になるように修正します。
-        修正後の文章だけを出力します。文章を削ることなく、可能な限り構成し、無理なところはそのまま出力してください。"""
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": input},
-        ]
-        options = CompletionOptions()
-
-        corrected_text = self.llm.create_completion(messages=messages, options=options)
-        print(f"original text: {input} \n corrected text: {corrected_text}")
-
-        return corrected_text
-
-    def chat_with_ai_operator(self, input: str, resp: ConversationResponse) -> str:
-        system_prompt = """
-        あなたは、AI受付システムです。ユーザーからの文章を元に、AIが返答します。
+        あなたは、高精度な文章修正システムです。
+        あなたは、ユーザーが電話で発話した音声データを、AIによって文字起こししたテキストを受け取ります。
+        電話応対をしているとイメージして、そのテキストの文脈に合うように修正してください。
+        あなたが修正するのは、ユーザーの発話テキストのみです。
+        
+        # example
+        input: 田中さんって言いますか？
+        output: 田中さんっていますか？
+        
+        input: お世話しております
+        output: お世話になっております
+        
+        input: ゼロハチゼロ
+        output: 080
         """
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": input},
         ]
         options = CompletionOptions()
+
+        revised_text = self.llm.create_completion(messages=messages, options=options)
+        print(f"original: {input} -> revised: {revised_text}")
+
+        return revised_text
+
+    def chat_with_ai_operator(self, conversation_logs: list[dict[str, str]]) -> str:
+        system_prompt = """
+        あなたは、首無商事株式会社の電話応対システムです。
+        お客様からのお問い合わせに対して、電話で回答をしているBOTです。
+        要件を聞いて、適切な回答をしてください。
+        電話対応は以下のように行います。
+        1. 誰宛の電話か確認する
+        2. お問い合わせの内容を聞く
+        3. 担当から折り返すと伝える。折り返しのために、再度お客様の名前と、電話番号を伺う。
+         例: お名前と電話番号をお願いします。
+            user: 田中太郎です。
+            you: 田中太郎様ですね。お電話番号をお伺いします。
+            user: 080
+            assistant: 080
+            user: 1234
+            assistant: 1234
+            user: 5678
+            assistant: 5678
+            user: それです
+            assistant: 080-1234-5678ですね。折り返しの担当者が折り返しの電話をさせていただきます。
+        4. 伺った情報を復唱し、問題なければ電話を終了する。電話は必ず相手に切ってもらうこと！
+        """
+        messages = [
+            {"role": "system", "content": system_prompt},
+            *conversation_logs,
+        ]
+        options = CompletionOptions()
         answer = self.llm.create_completion(messages=messages, options=options)
 
-        return resp.say(answer)
+        return answer
