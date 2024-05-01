@@ -113,19 +113,24 @@ loop:
 		default:
 		}
 
-		pr.processAudioInput(stream, filepathCh)
+		pr.processAudioInput(filepathCh, stream)
 	}
 
 	return nil
 }
 
+func (pr *PCMRecorder) Stop() {
+	pr.audioSystem.Terminate()
+}
+
 func (pr *PCMRecorder) initializeAudioStream() (*AudioSystemStream, error) {
+
 	pr.Input = make([]int16, 64)
 	stream, err := pr.audioSystem.OpenDefaultStream(1, 0, 16000, len(pr.Input), pr.Input)
 	return &stream, err
 }
 
-func (pr *PCMRecorder) processAudioInput(stream *AudioSystemStream, filePathCh chan string) {
+func (pr *PCMRecorder) processAudioInput(filePathCh chan string, stream *AudioSystemStream) {
 	if err := (*stream).Read(); err != nil {
 		log.Fatalf("Could not read stream\n%v", err)
 	}

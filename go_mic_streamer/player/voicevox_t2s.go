@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 
@@ -57,12 +58,23 @@ func Say(text string) error {
 }
 
 func playVoice(voiceBytes []byte) error {
+	log.Printf("voice bytes: %d", len(voiceBytes))
+
 	// portaudioの初期化
 	portaudio.Initialize()
 	defer portaudio.Terminate()
 
 	// オーディオストリームを開く
-	stream, err := portaudio.OpenDefaultStream(1, 0, 24000, len(voiceBytes), func(out []int32) {
+	outDevice, err := portaudio.DefaultOutputDevice()
+	if err != nil {
+		log.Println("Error!!!!!")
+		panic(err)
+	}
+
+	log.Printf("out device: %v (%v)", outDevice.Name, outDevice.DefaultSampleRate)
+
+	streamParams := portaudio.LowLatencyParameters(nil, outDevice)
+	stream, err := portaudio.OpenStream(streamParams, func(out []int32) {
 		for i := range out {
 			if len(voiceBytes) > 0 {
 				out[i] = int32(voiceBytes[0])
@@ -70,12 +82,15 @@ func playVoice(voiceBytes []byte) error {
 			}
 		}
 	})
+
 	if err != nil {
-		return err
+		log.Println("Error😃")
+		panic(err)
 	}
 	defer stream.Close()
 
 	// オーディオストリームの開始
+	log.Printf("Start play: %d", len(voiceBytes))
 	if err := stream.Start(); err != nil {
 		return err
 	}

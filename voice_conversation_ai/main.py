@@ -37,7 +37,6 @@ async def websocket_test(websocket: WebSocket):
          "content": "お電話ありがとうございます。首無し商事株式会社、自動応答システムでございます。"},
     ]
     while True:
-        await websocket.send_text("はい")
         data = await websocket.receive_json()
         decoded_wav = base64.b64decode(data["media"]["payload"])
         # with open("decoded_audio.wav", "wb") as f:

@@ -105,7 +105,9 @@ class ConversationService:
             assistant: 5678
             user: それです
             assistant: 080-1234-5678ですね。折り返しの担当者が折り返しの電話をさせていただきます。
-        4. 伺った情報を復唱し、問題なければ電話を終了する。電話は必ず相手に切ってもらうこと！
+        4. 伺った情報を復唱して確認する。
+        
+        注意：電話番号は、11桁または10桁です。
         """
         messages = [
             {"role": "system", "content": system_prompt},
