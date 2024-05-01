@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/net/websocket"
 
+	player "github.com/killinsun/voice-conversation-ai/go_mic_streamer/player"
 	pcm "github.com/killinsun/voice-conversation-ai/go_mic_streamer/recorder"
 )
 
@@ -45,7 +46,7 @@ func main() {
 	}
 
 	audioSystem := &pcm.PortAudioSystem{}
-	pr := pcm.NewPCMRecorder(audioSystem, fmt.Sprintf(baseDir+"/file"), 30, 100)
+	pr := pcm.NewPCMRecorder(audioSystem, fmt.Sprintf(baseDir+"/file"), 30, 150)
 
 	pr.GetDeviceInfo()
 
@@ -92,12 +93,11 @@ func main() {
 			receivedText := string(msg[:n])
 			log.Println("AI:", receivedText)
 
-			// 受信したテキストを処理する
-			// log.Println("starting Say")
-			// err = player.Say(receivedText)
-			// if err != nil {
-			// 	log.Fatal("Error!", err)
-			// }
+			log.Println("starting Say")
+			err = player.Say(receivedText)
+			if err != nil {
+				log.Fatal("Error!", err)
+			}
 		}
 	}()
 

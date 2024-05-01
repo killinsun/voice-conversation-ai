@@ -175,6 +175,7 @@ func (pr *PCMRecorder) detectSilence(input []int16) bool {
 
 	for _, bit := range input {
 		if abs(int16(bit)) > threshold {
+			fmt.Printf("%d, ", bit)
 			silent = false
 			break
 		}
