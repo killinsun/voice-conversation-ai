@@ -65,6 +65,7 @@ type PCMRecorder struct {
 	AltLangCodes         []string
 	BufferedContents     []int16
 	Input                []int16
+	IsRecording          bool
 	recognitionStartTime time.Duration
 	silentCount          int
 	unSilentCount        int
@@ -76,6 +77,7 @@ func NewPCMRecorder(audioSystem AudioSystem, baseDir string, interval int, silen
 		BaseDir:              baseDir,
 		Interval:             interval,
 		SilentRatio:          silentRatio,
+		IsRecording:          false,
 		recognitionStartTime: -1,
 		audioSystem:          audioSystem,
 	}
@@ -88,39 +90,64 @@ func (pr *PCMRecorder) GetDeviceInfo() {
 	pr.audioSystem.GetDeviceInfo()
 }
 
-func (pr *PCMRecorder) Start(sig chan os.Signal, filepathCh chan string, wait *sync.WaitGroup) error {
-	pr.audioSystem.Initialize()
-	defer pr.audioSystem.Terminate()
+func (pr *PCMRecorder) Start(sig chan os.Signal, filePathCh chan string, wait *sync.WaitGroup, startChan <-chan struct{}, stopChan <-chan struct{}) error {
+	wait.Add(1)
+	defer wait.Done()
 
-	var err error
-	stream, err := pr.initializeAudioStream()
+	go func() {
+		log.Println("PCM Recorder Start")
+		defer close(filePathCh)
+		pr.audioSystem.Initialize()
+		defer pr.audioSystem.Terminate()
 
-	if err != nil {
-		log.Fatalf("Could not open default stream \n %v", err)
-	}
-	(*stream).Start()
-	defer (*stream).Close()
+		var err error
+		stream, err := pr.initializeAudioStream()
+		log.Printf("stream: %v", stream)
 
-	log.Println("Device initialized.")
-
-loop:
-	for {
-		select {
-		case <-sig:
-			wait.Done()
-			close(filepathCh)
-			break loop
-		default:
+		if err != nil {
+			log.Fatalf("Could not open default stream \n %v", err)
 		}
 
-		pr.processAudioInput(filepathCh, stream)
-	}
+		log.Println("Device initialized.")
+
+	loop:
+		for {
+			select {
+			case <-sig:
+				wait.Done()
+				close(filePathCh)
+				pr.stopRecording(stream)
+				pr.IsRecording = false
+				break loop
+			case <-startChan:
+				log.Println("Received startChan")
+				// 録音開始
+				err := pr.startRecording(stream)
+				pr.IsRecording = true
+				if err != nil {
+					log.Println("Error starting recording:", err)
+					continue
+				}
+			case <-stopChan:
+				log.Println("Received stopChan")
+				// 録音停止
+				err := pr.stopRecording(stream)
+				pr.IsRecording = false
+				if err != nil {
+					log.Println("Error stopping recording:", err)
+					continue
+				}
+			default:
+				if pr.IsRecording == true {
+					pr.processAudioInput(filePathCh, stream)
+				}
+			}
+		}
+
+		(*stream).Close()
+	}()
 
 	return nil
-}
-
-func (pr *PCMRecorder) Stop() {
-	pr.audioSystem.Terminate()
 }
 
 func (pr *PCMRecorder) initializeAudioStream() (*AudioSystemStream, error) {
@@ -128,6 +155,20 @@ func (pr *PCMRecorder) initializeAudioStream() (*AudioSystemStream, error) {
 	pr.Input = make([]int16, 64)
 	stream, err := pr.audioSystem.OpenDefaultStream(1, 0, 16000, len(pr.Input), pr.Input)
 	return &stream, err
+}
+
+func (pr *PCMRecorder) startRecording(stream *AudioSystemStream) error {
+	log.Println("Starting Stream")
+	err := (*stream).Start()
+
+	return err
+}
+
+func (pr *PCMRecorder) stopRecording(stream *AudioSystemStream) error {
+	log.Println("Stopping Stream")
+	err := (*stream).Stop()
+
+	return err
 }
 
 func (pr *PCMRecorder) processAudioInput(filePathCh chan string, stream *AudioSystemStream) {

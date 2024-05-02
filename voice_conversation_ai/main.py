@@ -32,10 +32,14 @@ async def websocket_test(websocket: WebSocket):
     # response = VoiceVoxTextToSpeechResponse()
     response = SimpleTextDisplayResponse()
 
+    initial_content = "お電話ありがとうございます。首無し商事株式会社、自動応答システムでございます。"
     conversation_logs = [
         {"role": "assistant",
-         "content": "お電話ありがとうございます。首無し商事株式会社、自動応答システムでございます。"},
+         "content": initial_content
+         }
     ]
+
+    await websocket.send_text(initial_content)
     while True:
         data = await websocket.receive_json()
         decoded_wav = base64.b64decode(data["media"]["payload"])

@@ -31,6 +31,13 @@ type MediaStreamStruct struct {
 	StreamSid      string      `json:"streamSid"`
 }
 
+type RecordingState struct {
+	startChan   chan struct{}
+	stopChan    chan struct{}
+	isRecording bool
+	mu          sync.Mutex
+}
+
 func main() {
 	log.SetFlags(log.Lmicroseconds)
 
@@ -48,40 +55,55 @@ func main() {
 	audioSystem := &pcm.PortAudioSystem{}
 	pr := pcm.NewPCMRecorder(audioSystem, fmt.Sprintf(baseDir+"/file"), 30, 150)
 
-	pr.GetDeviceInfo()
-
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, os.Kill)
 
 	filePathCh := make(chan string)
 
+	log.Println("Initializing recording state")
+	recordingState := &RecordingState{
+		startChan:   make(chan struct{}),
+		stopChan:    make(chan struct{}),
+		isRecording: false,
+	}
+
+	log.Println("Initializing recording state ... ok")
+
 	var wait sync.WaitGroup
 	wait.Add(1)
+
+	// 実際に音声ストリームを処理するゴルーチン
 	go func() {
-		if err := pr.Start(sig, filePathCh, &wait); err != nil {
+		if err := pr.Start(sig, filePathCh, &wait, recordingState.startChan, recordingState.stopChan); err != nil {
 			log.Fatalf("Error starting PCMRecorder: %v", err)
 		}
 	}()
 
+	// 保存した wav ファイルを Websocket でバックエンドで送信するゴルーチン
 	go func() {
 		for {
 			filePath, ok := <-filePathCh
 			if !ok {
 				break
 			}
-			b, err := ioutil.ReadFile(filePath)
-			if err != nil {
-				log.Fatal(err)
-			}
-			b64EncodedWav := base64.StdEncoding.EncodeToString(b)
+			recordingState.mu.Lock()
+			isRecording := recordingState.isRecording
+			recordingState.mu.Unlock()
+			if isRecording {
+				b, err := ioutil.ReadFile(filePath)
+				if err != nil {
+					log.Fatal(err)
+				}
+				b64EncodedWav := base64.StdEncoding.EncodeToString(b)
 
-			if err := sendMediaStream(ws, b64EncodedWav); err != nil {
-				log.Fatal(err)
+				if err := sendMediaStream(ws, b64EncodedWav); err != nil {
+					log.Fatal(err)
+				}
 			}
 		}
 	}()
 
-	// WebSocketからテキストを受信する処理を追加
+	// WebSocketからテキストを受信した際のゴルーチン
 	go func() {
 		var msg = make([]byte, 512)
 		for {
@@ -93,11 +115,15 @@ func main() {
 			receivedText := string(msg[:n])
 			log.Println("AI:", receivedText)
 
+			stopRecording(recordingState)
+
 			log.Println("starting Say")
 			err = player.Say(receivedText)
 			if err != nil {
 				log.Fatal("Error!", err)
 			}
+
+			startRecording(recordingState)
 		}
 	}()
 
@@ -133,4 +159,22 @@ func sendMediaStream(ws *websocket.Conn, payload string) error {
 	log.Printf("Send: %d to Server", mediaStream.SequenceNumber)
 
 	return nil
+}
+
+func startRecording(state *RecordingState) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if !state.isRecording {
+		state.startChan <- struct{}{}
+		state.isRecording = true
+	}
+}
+
+func stopRecording(state *RecordingState) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.isRecording {
+		state.stopChan <- struct{}{}
+		state.isRecording = false
+	}
 }
